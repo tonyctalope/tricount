@@ -1,0 +1,135 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Auth.js models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Application models
+model Couple {
+  id                 String              @id @default(cuid())
+  label              String              @default("Notre couple")
+  createdAt          DateTime            @default(now())
+  users              User[]
+  expenses           Expense[]
+  recurringExpenses  RecurringExpense[]
+  archives           Archive[]
+}
+
+model User {
+  id         String    @id @default(cuid())
+  coupleId   String?
+  email      String    @unique
+  name       String?
+  image      String?
+  prorataPct Int       @default(50)
+  createdAt  DateTime  @default(now())
+  emailVerified DateTime?
+
+  couple     Couple?   @relation(fields: [coupleId], references: [id])
+  accounts   Account[]
+  sessions   Session[]
+  paidExpenses Expense[] @relation("PayerExpenses")
+  paidRecurringExpenses RecurringExpense[] @relation("PayerRecurringExpenses")
+}
+
+enum ParticipantsType {
+  BOTH
+  PAYER_ONLY
+  OTHER_ONLY
+}
+
+model Expense {
+  id           String           @id @default(cuid())
+  coupleId     String
+  payerId      String
+  description  String
+  amount       Decimal          @db.Decimal(12, 2)
+  currency     String           @default("EUR")
+  date         DateTime         @default(now())
+  participants ParticipantsType @default(BOTH)
+  prorata      Boolean          @default(false)
+  archiveId    String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  couple  Couple   @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  payer   User     @relation("PayerExpenses", fields: [payerId], references: [id])
+  archive Archive? @relation(fields: [archiveId], references: [id], onDelete: SetNull)
+
+  @@index([coupleId])
+  @@index([payerId])
+  @@index([archiveId])
+}
+
+model Archive {
+  id         String   @id @default(cuid())
+  coupleId   String
+  label      String
+  archivedAt DateTime @default(now())
+
+  couple   Couple    @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  expenses Expense[]
+
+  @@index([coupleId])
+}
+
+model RecurringExpense {
+  id           String           @id @default(cuid())
+  coupleId     String
+  payerId      String
+  description  String
+  amount       Decimal          @db.Decimal(12, 2)
+  currency     String           @default("EUR")
+  participants ParticipantsType @default(BOTH)
+  prorata      Boolean          @default(false)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  couple Couple @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  payer  User   @relation("PayerRecurringExpenses", fields: [payerId], references: [id])
+
+  @@index([coupleId])
+  @@index([payerId])
+}
