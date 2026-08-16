@@ -9,7 +9,7 @@ Pas de tableau partagé public, pas de groupes à N personnes, pas d'inscription
 - **Dépenses partagées** — création, édition, suppression. Par dépense, choix du payeur, des participants (50/50, payeur seul, autre seul) et de la devise (EUR par défaut).
 - **Mode prorata** — chaque utilisateur a un pourcentage personnel (0–100 %) ; quand le prorata est activé sur une dépense, le partage suit ces pourcentages au lieu du 50/50.
 - **Dépenses récurrentes** — des _templates_ (loyer, abonnements…) que vous ré-appliquez en un clic chaque mois (les dépenses créées portent la date du jour).
-- **Archives mensuelles** — gelez la période courante sous un libellé (par défaut le mois précédent en français). Les archives sont consultables en lecture seule ; les dépenses récurrentes ne sont pas concernées.
+- **Archives mensuelles** — gelez la période courante sous un libellé (par défaut le mois précédent en français). Les archives sont consultables en lecture seule ; les pourcentages de prorata sont figés au moment de l'archivage (les modifier ensuite ne change plus les soldes archivés). Les dépenses récurrentes ne sont pas concernées.
 - **Soldes en temps réel** — calculés côté serveur avec `Decimal` (pas de drift flottant). Affichage mobile et desktop.
 - **Authentification stricte** — Google OAuth uniquement, avec une allowlist de **deux emails** définie en variable d'environnement. Toutes les opérations sont scopées au `coupleId` de l'utilisateur.
 
@@ -141,7 +141,7 @@ tests/                    # vitest (lib/ + actions/)
 - `Couple` — conteneur pour exactement 2 `User`, leurs `Expense`, `RecurringExpense` et `Archive`.
 - `Expense` — montant `Decimal(12,2)`, devise, date, `participants ∈ {BOTH, PAYER_ONLY, OTHER_ONLY}`, `prorata: boolean`, `archiveId` nullable (null = période active, sinon dans une archive).
 - `RecurringExpense` — même schéma sans `date` ni `archiveId`. Sert de _template_ ré-appliqué à la demande.
-- `Archive` — snapshot figé d'une période (`label` libre, `archivedAt`). Les expenses migrent dedans via mise à jour du FK `archiveId`.
+- `Archive` — snapshot figé d'une période (`label` libre, `archivedAt`, `prorataSnapshot` = `{ [userId]: prorataPct }` au moment de l'archivage). Les expenses migrent dedans via mise à jour du FK `archiveId`.
 - `User` — `prorataPct: Int` (défaut 50), `coupleId` nullable.
 
 ### Calcul des soldes
@@ -149,6 +149,8 @@ tests/                    # vitest (lib/ + actions/)
 `lib/balance.ts` parcourt les dépenses, crédite le payeur du montant total, puis débite chaque utilisateur de sa part. La part dépend du couple `(participants, prorata)`. Tout passe par `Decimal` ; conversion en `number` uniquement au moment de renvoyer le résultat.
 
 Le prorata s'applique même aux dépenses `PAYER_ONLY`/`OTHER_ONLY` (cas d'une dépense personnelle où l'autre contribue partiellement selon son pourcentage).
+
+Un 4ᵉ argument optionnel (`prorataSnapshot`) permet de calculer avec des pourcentages figés plutôt qu'avec ceux, courants, des utilisateurs : c'est ce que passent les pages d'archives.
 
 ## Sécurité
 

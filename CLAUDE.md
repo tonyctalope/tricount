@@ -82,7 +82,7 @@ docker compose up --build                    # full app + DB (uses .env.docker, 
   - `archiveId = <id>` → belongs to a frozen archive.
   - `onDelete: SetNull` on the archive FK (deleting an archive turns expenses back into orphans — but `deleteArchive` deletes them too in the same transaction).
 - **RecurringExpense** — template; same fields as `Expense` minus `date` and `archiveId`. Applied on demand via `applyAllRecurringExpenses()` (creates real expenses dated `now`).
-- **Archive** — `label: String` (user-chosen, e.g. "Mai 2026"), `archivedAt: DateTime`. Owns its expenses by FK.
+- **Archive** — `label: String` (user-chosen, e.g. "Mai 2026"), `archivedAt: DateTime`, `prorataSnapshot: Json?` (`{ [userId]: prorataPct }` frozen at archive time — `null` on archives created before this field existed, which fall back to the users' current percentages). Owns its expenses by FK.
 - **ParticipantsType** enum: `BOTH | PAYER_ONLY | OTHER_ONLY`.
 - **Account / Session / VerificationToken** — Auth.js tables.
 
@@ -96,6 +96,8 @@ Core algorithm in `lib/balance.ts`:
    - **Non-prorata mode** is a straight 50/50 (`BOTH`), 100/0 (`PAYER_ONLY`) or 0/100 (`OTHER_ONLY`).
 3. Debit each user by their share.
 4. Return `{ balance1, balance2 }` as `number` (only conversion point — internals stay `Decimal`).
+
+An optional 4th argument, `prorataSnapshot` (`Record<userId, pct>`), overrides the users' current `prorataPct` — per user, with a fallback on the live value for any missing id. The archive pages pass `parseProrataSnapshot(archive.prorataSnapshot)` so that changing a percentage in `/settings` never rewrites an archived period's balances. `lib/prorata-snapshot.ts` holds `buildProrataSnapshot()` (write path, in `archiveCurrentPeriod`) and `parseProrataSnapshot()` (read path, tolerant of the `Json` column's shape).
 
 `lib/archive-label.ts` provides `getDefaultArchiveLabel()` — returns the **previous** month's name in French, capitalised (e.g. on 2026-05-26 returns `"Avril 2026"`). Used as the default label in the archive dialog.
 
@@ -119,7 +121,7 @@ All mutations are `"use server"`. They follow the same shape: `getCurrentUser()`
 
 **`app/actions/archives.ts`**:
 
-- `archiveCurrentPeriod(label)` — runs inside `prisma.$transaction(async (tx) => …)`: counts active expenses, creates an `Archive`, reassigns all active expenses to it via `updateMany`. Returns early with `"Aucune dépense à archiver"` if the count is 0.
+- `archiveCurrentPeriod(label)` — runs inside `prisma.$transaction(async (tx) => …)`: counts active expenses, snapshots the couple's `prorataPct` values, creates an `Archive` carrying that snapshot, reassigns all active expenses to it via `updateMany`. Returns early with `"Aucune dépense à archiver"` if the count is 0.
 - `deleteArchive(id)` — array-form `$transaction`: `expense.deleteMany({ archiveId, coupleId })` + `archive.delete({ id })`. Irreversible.
 
 **Security invariants** (enforced in every action):
@@ -228,6 +230,7 @@ tests/
 ├── lib/
 │   ├── balance.test.ts        # Balance algorithm (every participant × prorata combo)
 │   ├── archive-label.test.ts  # Default French month label
+│   ├── prorata-snapshot.test.ts # build/parse of the frozen archive percentages
 │   └── utils.test.ts          # cn() helper
 └── actions/
     ├── expenses.test.ts   # Server Actions: create/update/delete/prorata

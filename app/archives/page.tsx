@@ -4,6 +4,7 @@ import { ArrowLeft, Archive as ArchiveIcon } from "lucide-react"
 import { getCurrentUser } from "@/lib/session"
 import { prisma } from "@/lib/prisma"
 import { calculateBalances } from "@/lib/balance"
+import { parseProrataSnapshot } from "@/lib/prorata-snapshot"
 import { Decimal } from "@prisma/client/runtime/library"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -46,7 +47,12 @@ export default async function ArchivesPage() {
       (acc, e) => acc.plus(new Decimal(e.amount)),
       new Decimal(0),
     )
-    const { balance1, balance2 } = calculateBalances(archive.expenses, user1, user2)
+    const { balance1, balance2 } = calculateBalances(
+      archive.expenses,
+      user1,
+      user2,
+      parseProrataSnapshot(archive.prorataSnapshot),
+    )
     const myBalance = currentUserData.id === user1.id ? balance1 : balance2
     return {
       id: archive.id,

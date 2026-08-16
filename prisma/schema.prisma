@@ -104,10 +104,13 @@ model Expense {
 }
 
 model Archive {
-  id         String   @id @default(cuid())
-  coupleId   String
-  label      String
-  archivedAt DateTime @default(now())
+  id              String   @id @default(cuid())
+  coupleId        String
+  label           String
+  archivedAt      DateTime @default(now())
+  // Pourcentages de prorata figés au moment de l'archivage : { [userId]: prorataPct }.
+  // Garantit qu'une modification ultérieure des prorata ne change pas les soldes archivés.
+  prorataSnapshot Json?
 
   couple   Couple    @relation(fields: [coupleId], references: [id], onDelete: Cascade)
   expenses Expense[]

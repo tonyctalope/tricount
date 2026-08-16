@@ -1,15 +1,26 @@
 import { Expense, User } from "@prisma/client"
 import { Decimal } from "@prisma/client/runtime/library"
+import type { ProrataSnapshot } from "@/lib/prorata-snapshot"
 
-export function calculateBalances(expenses: Expense[], user1: User, user2: User) {
+/**
+ * `prorataSnapshot` fige les pourcentages utilisés (cf. archives) : sans lui,
+ * les prorata courants des utilisateurs sont appliqués.
+ */
+export function calculateBalances(
+  expenses: Expense[],
+  user1: User,
+  user2: User,
+  prorataSnapshot?: ProrataSnapshot | null,
+) {
   let balance1 = new Decimal(0)
   let balance2 = new Decimal(0)
+
+  const prorataUser1 = prorataSnapshot?.[user1.id] ?? user1.prorataPct
+  const prorataUser2 = prorataSnapshot?.[user2.id] ?? user2.prorataPct
 
   for (const expense of expenses) {
     const amount = new Decimal(expense.amount)
     const isPayer1 = expense.payerId === user1.id
-    const prorataUser1 = user1.prorataPct
-    const prorataUser2 = user2.prorataPct
 
     // Créditer le payeur
     if (isPayer1) {

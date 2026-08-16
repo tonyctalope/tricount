@@ -216,4 +216,49 @@ describe("calculateBalances", () => {
       expect(balance2).toBe(0)
     })
   })
+
+  describe("prorata snapshot (archives)", () => {
+    const expense = makeExpense({
+      payerId: "u1",
+      amount: new Decimal(200),
+      participants: "BOTH",
+      prorata: true,
+    })
+
+    it("uses the frozen percentages instead of the users' current ones", () => {
+      // Snapshot 50/50 alors que les users sont désormais à 65/35.
+      const { balance1, balance2 } = calculateBalances([expense], user1, user2, {
+        u1: 50,
+        u2: 50,
+      })
+      expect(balance1).toBe(100) // 200 payés - 100 de part
+      expect(balance2).toBe(-100)
+    })
+
+    it("is unaffected by a later prorata change", () => {
+      const snapshot = { u1: 65, u2: 35 }
+      const before = calculateBalances([expense], user1, user2, snapshot)
+      const after = calculateBalances(
+        [expense],
+        makeUser({ id: "u1", prorataPct: 10 }),
+        makeUser({ id: "u2", prorataPct: 90 }),
+        snapshot,
+      )
+      expect(after).toEqual(before)
+    })
+
+    it("falls back to the users' current percentages when null", () => {
+      const withSnapshot = calculateBalances([expense], user1, user2, null)
+      const without = calculateBalances([expense], user1, user2)
+      expect(withSnapshot).toEqual(without)
+      expect(withSnapshot.balance1).toBe(70)
+    })
+
+    it("falls back per user when the snapshot only covers one of them", () => {
+      // u2 absent du snapshot → on retombe sur son prorata courant (35%).
+      const { balance1, balance2 } = calculateBalances([expense], user1, user2, { u1: 65 })
+      expect(balance1).toBe(70)
+      expect(balance2).toBe(-70)
+    })
+  })
 })

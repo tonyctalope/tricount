@@ -25,6 +25,10 @@ describe("archiveCurrentPeriod", () => {
     // Forward the callback to prismaMock so we can assert on the inner calls.
     prismaMock.$transaction.mockImplementation((fn) => fn(prismaMock))
     prismaMock.expense.count.mockResolvedValue(3)
+    prismaMock.user.findMany.mockResolvedValue([
+      { id: "user-1", prorataPct: 65 },
+      { id: "user-2", prorataPct: 35 },
+    ])
     prismaMock.archive.create.mockResolvedValue({ id: "arch-1" })
     prismaMock.expense.updateMany.mockResolvedValue({ count: 3 })
 
@@ -35,7 +39,11 @@ describe("archiveCurrentPeriod", () => {
       where: { coupleId: "couple-1", archiveId: null },
     })
     expect(prismaMock.archive.create).toHaveBeenCalledWith({
-      data: { coupleId: "couple-1", label: "Mai 2026" },
+      data: {
+        coupleId: "couple-1",
+        label: "Mai 2026",
+        prorataSnapshot: { "user-1": 65, "user-2": 35 },
+      },
     })
     expect(prismaMock.expense.updateMany).toHaveBeenCalledWith({
       where: { coupleId: "couple-1", archiveId: null },
@@ -49,14 +57,45 @@ describe("archiveCurrentPeriod", () => {
     authedAs()
     prismaMock.$transaction.mockImplementation((fn) => fn(prismaMock))
     prismaMock.expense.count.mockResolvedValue(1)
+    prismaMock.user.findMany.mockResolvedValue([{ id: "user-1", prorataPct: 50 }])
     prismaMock.archive.create.mockResolvedValue({ id: "arch-1" })
     prismaMock.expense.updateMany.mockResolvedValue({ count: 1 })
 
     await archiveCurrentPeriod("  Mai 2026  ")
 
     expect(prismaMock.archive.create).toHaveBeenCalledWith({
-      data: { coupleId: "couple-1", label: "Mai 2026" },
+      data: {
+        coupleId: "couple-1",
+        label: "Mai 2026",
+        prorataSnapshot: { "user-1": 50 },
+      },
     })
+  })
+
+  it("freezes the couple's prorata percentages on the archive", async () => {
+    authedAs()
+    prismaMock.$transaction.mockImplementation((fn) => fn(prismaMock))
+    prismaMock.expense.count.mockResolvedValue(2)
+    prismaMock.user.findMany.mockResolvedValue([
+      { id: "user-1", prorataPct: 70 },
+      { id: "user-2", prorataPct: 30 },
+    ])
+    prismaMock.archive.create.mockResolvedValue({ id: "arch-1" })
+    prismaMock.expense.updateMany.mockResolvedValue({ count: 2 })
+
+    await archiveCurrentPeriod("Mai 2026")
+
+    expect(prismaMock.user.findMany).toHaveBeenCalledWith({
+      where: { coupleId: "couple-1" },
+      select: { id: true, prorataPct: true },
+    })
+    expect(prismaMock.archive.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          prorataSnapshot: { "user-1": 70, "user-2": 30 },
+        }),
+      }),
+    )
   })
 
   it("rejects an empty label", async () => {

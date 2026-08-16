@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react"
 import { getCurrentUser } from "@/lib/session"
 import { prisma } from "@/lib/prisma"
 import { calculateBalances } from "@/lib/balance"
+import { parseProrataSnapshot } from "@/lib/prorata-snapshot"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ExpensesList } from "@/components/expenses-list"
@@ -48,7 +49,12 @@ export default async function ArchiveDetailPage({ params }: { params: Promise<{ 
   const currentUserData = couple.users.find((u) => u.email === user.email)!
   const partnerData = couple.users.find((u) => u.email !== user.email)!
 
-  const { balance1, balance2 } = calculateBalances(archive.expenses, user1, user2)
+  const { balance1, balance2 } = calculateBalances(
+    archive.expenses,
+    user1,
+    user2,
+    parseProrataSnapshot(archive.prorataSnapshot),
+  )
   const myBalance = currentUserData.id === user1.id ? balance1 : balance2
   const partnerBalance = currentUserData.id === user1.id ? balance2 : balance1
 

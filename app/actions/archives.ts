@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/session"
+import { buildProrataSnapshot } from "@/lib/prorata-snapshot"
 
 const labelSchema = z
   .string()
@@ -30,8 +31,15 @@ export async function archiveCurrentPeriod(rawLabel: string) {
         return { error: "Aucune dépense à archiver" as const }
       }
 
+      // Fige les prorata du couple : les soldes de l'archive resteront ceux de
+      // la période, même si les pourcentages sont modifiés plus tard.
+      const users = await tx.user.findMany({
+        where: { coupleId },
+        select: { id: true, prorataPct: true },
+      })
+
       const archive = await tx.archive.create({
-        data: { coupleId, label },
+        data: { coupleId, label, prorataSnapshot: buildProrataSnapshot(users) },
       })
 
       await tx.expense.updateMany({
